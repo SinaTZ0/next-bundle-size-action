@@ -25,6 +25,11 @@ inputs:
     description: 'Base branch to compare against'
     required: false
     default: 'main'
+  
+  npm-install-args:
+    description: 'Additional arguments for npm ci command (e.g., --legacy-peer-deps)'
+    required: false
+    default: '--legacy-peer-deps'
 
 runs:
   using: 'node20'

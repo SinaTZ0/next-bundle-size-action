@@ -10,6 +10,7 @@ async function run() {
     const githubToken = core.getInput('github-token');
     const commentStrategy = core.getInput('comment-strategy') || 'always';
     const baseBranch = core.getInput('base-branch') || 'main';
+    const npmInstallArgs = core.getInput('npm-install-args') || '--legacy-peer-deps';
 
     // Initialize GitHub client
     const octokit = github.getOctokit(githubToken);
@@ -37,7 +38,7 @@ async function run() {
     }
 
     // Get base branch bundle stats for comparison
-    const baseStats = await getBaseBranchStats(workingDirectory, baseBranch);
+    const baseStats = await getBaseBranchStats(workingDirectory, baseBranch, npmInstallArgs);
 
     // For PRs, create comment with bundle size comparison
     await handlePullRequest(octokit, context, currentBundleStats, baseStats, commentStrategy);
@@ -171,7 +172,7 @@ async function handlePullRequest(octokit, context, currentStats, baseStats, comm
 
 
 
-async function getBaseBranchStats(workingDir, baseBranch) {
+async function getBaseBranchStats(workingDir, baseBranch, npmInstallArgs = '--legacy-peer-deps') {
   const { execSync } = require('child_process');
   
   try {
@@ -185,8 +186,8 @@ async function getBaseBranchStats(workingDir, baseBranch) {
     execSync(`git checkout origin/${baseBranch}`, { cwd: workingDir });
     
     // Install dependencies and build
-    core.info('Installing dependencies for base branch...');
-    execSync('npm ci', { cwd: workingDir });
+    core.info(`Installing dependencies for base branch with args: ${npmInstallArgs}`);
+    execSync(`npm ci ${npmInstallArgs}`, { cwd: workingDir });
     
     core.info('Building base branch...');
     execSync('npm run build', { cwd: workingDir });
