@@ -34606,8 +34606,14 @@ async function run() {
     core.info(`Working directory: ${workingDirectory}`);
     core.info(`Event: ${context.eventName}`);
     core.info(`Is PR: ${isPR}`);
+    core.info(`Base branch: ${baseBranch}`);
 
-    // Analyze current bundle
+    if (!isPR) {
+      core.info('Not a pull request, skipping bundle size analysis');
+      return;
+    }
+
+    // Analyze current bundle (PR branch)
     const currentBundleStats = await analyzeBundleSize(workingDirectory);
     
     if (!currentBundleStats) {
@@ -34615,13 +34621,11 @@ async function run() {
       return;
     }
 
-    if (isPR) {
-      // For PRs, compare with base branch and comment
-      await handlePullRequest(octokit, context, currentBundleStats, commentStrategy, baseBranch);
-    } else {
-      // For main branch, store the bundle stats for future comparisons
-      await storeBundleStats(currentBundleStats, context);
-    }
+    // Get base branch bundle stats for comparison
+    const baseStats = await getBaseBranchStats(workingDirectory, baseBranch);
+
+    // For PRs, create comment with bundle size comparison
+    await handlePullRequest(octokit, context, currentBundleStats, baseStats, commentStrategy);
 
   } catch (error) {
     core.setFailed(error.message);
@@ -34699,12 +34703,9 @@ async function analyzeBundleSize(workingDir) {
   }
 }
 
-async function handlePullRequest(octokit, context, currentStats, commentStrategy, baseBranch) {
+async function handlePullRequest(octokit, context, currentStats, baseStats, commentStrategy) {
   const { owner, repo } = context.repo;
   const prNumber = context.payload.pull_request.number;
-
-  // Try to get base branch stats from artifacts or issues
-  const baseStats = await getBaseBranchStats(octokit, owner, repo, baseBranch);
   
   // Generate comparison comment
   const commentBody = generateComparisonComment(currentStats, baseStats);
@@ -34715,74 +34716,86 @@ async function handlePullRequest(octokit, context, currentStats, commentStrategy
     return;
   }
 
-  // Find existing comment
-  const comments = await octokit.rest.issues.listComments({
-    owner,
-    repo,
-    issue_number: prNumber
-  });
-
-  const botComment = comments.data.find(comment => 
-    comment.body.includes('<!-- BUNDLE-SIZE-BOT -->')
-  );
-
-  if (botComment) {
-    // Update existing comment
-    await octokit.rest.issues.updateComment({
-      owner,
-      repo,
-      comment_id: botComment.id,
-      body: commentBody
-    });
-    core.info('Updated existing bundle size comment');
-  } else {
-    // Create new comment
-    await octokit.rest.issues.createComment({
-      owner,
-      repo,
-      issue_number: prNumber,
-      body: commentBody
-    });
-    core.info('Created new bundle size comment');
-  }
-}
-
-async function getBaseBranchStats(octokit, owner, repo, baseBranch) {
   try {
-    // Try to find bundle stats issue
-    const issues = await octokit.rest.issues.listForRepo({
+    // Find existing comment by looking at PR comments
+    const comments = await octokit.rest.issues.listComments({
       owner,
       repo,
-      labels: 'bundle-stats',
-      state: 'open'
+      issue_number: prNumber
     });
 
-    const statsIssue = issues.data.find(issue => 
-      issue.title.includes('Bundle Size Stats')
+    const botComment = comments.data.find(comment => 
+      comment.body.includes('<!-- BUNDLE-SIZE-BOT -->')
     );
 
-    if (statsIssue && statsIssue.body) {
-      // Extract stats from issue body
-      const statsMatch = statsIssue.body.match(/```json\n([\s\S]*?)\n```/);
-      if (statsMatch) {
-        return JSON.parse(statsMatch[1]);
-      }
+    if (botComment) {
+      // Update existing comment
+      await octokit.rest.issues.updateComment({
+        owner,
+        repo,
+        comment_id: botComment.id,
+        body: commentBody
+      });
+      core.info('Updated existing bundle size comment');
+    } else {
+      // Create new comment
+      await octokit.rest.issues.createComment({
+        owner,
+        repo,
+        issue_number: prNumber,
+        body: commentBody
+      });
+      core.info('Created new bundle size comment');
     }
   } catch (error) {
-    core.warning(`Could not retrieve base branch stats: ${error.message}`);
+    core.error(`Failed to post comment: ${error.message}`);
+    // Don't fail the action if commenting fails
+    core.warning('Could not post bundle size comment, but analysis completed successfully');
   }
-  
-  return null;
 }
 
-async function storeBundleStats(stats, context) {
-  // This would typically store stats in an issue or artifact for future comparisons
-  core.info('Storing bundle stats for future comparisons');
+
+
+async function getBaseBranchStats(workingDir, baseBranch) {
+  const { execSync } = __nccwpck_require__(5317);
   
-  const statsJson = JSON.stringify(stats, null, 2);
-  core.info(`Bundle stats: ${statsJson}`);
-  
-  // You could extend this to create/update a GitHub issue with the stats
+  try {
+    core.info(`Fetching base branch stats from ${baseBranch}`);
+    
+    // Save current branch/commit
+    const currentRef = execSync('git rev-parse HEAD', { cwd: workingDir, encoding: 'utf8' }).trim();
+    
+    // Fetch and checkout base branch
+    execSync(`git fetch origin ${baseBranch}`, { cwd: workingDir });
+    execSync(`git checkout origin/${baseBranch}`, { cwd: workingDir });
+    
+    // Install dependencies and build
+    core.info('Installing dependencies for base branch...');
+    execSync('npm ci', { cwd: workingDir });
+    
+    core.info('Building base branch...');
+    execSync('npm run build', { cwd: workingDir });
+    
+    // Analyze base branch bundle
+    const baseStats = await analyzeBundleSize(workingDir);
+    
+    // Restore original commit
+    execSync(`git checkout ${currentRef}`, { cwd: workingDir });
+    
+    return baseStats;
+  } catch (error) {
+    core.warning(`Could not analyze base branch: ${error.message}`);
+    
+    // Try to restore original commit on error
+    try {
+      const currentRef = execSync('git rev-parse HEAD', { cwd: workingDir, encoding: 'utf8' }).trim();
+      execSync(`git checkout ${currentRef}`, { cwd: workingDir });
+    } catch (restoreError) {
+      core.warning(`Could not restore original commit: ${restoreError.message}`);
+    }
+    
+    return null;
+  }
 }
 
 function generateComparisonComment(currentStats, baseStats) {
@@ -34790,7 +34803,7 @@ function generateComparisonComment(currentStats, baseStats) {
   comment += '## 📦 Bundle Size Analysis\n\n';
 
   if (!baseStats) {
-    comment += '> **Note**: No base branch data available for comparison. This is likely the first run on the base branch.\n\n';
+    comment += '> **Note**: Could not analyze base branch for comparison. Showing current bundle sizes only.\n\n';
     comment += generateCurrentStatsTable(currentStats);
   } else {
     comment += generateComparisonTable(currentStats, baseStats);
@@ -34815,6 +34828,8 @@ function generateCurrentStatsTable(stats) {
   
   return table;
 }
+
+
 
 function generateComparisonTable(currentStats, baseStats) {
   let table = '### Bundle Size Comparison\n\n';
