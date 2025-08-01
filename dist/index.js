@@ -34718,7 +34718,22 @@ async function handlePullRequest(octokit, context, currentStats, baseStats, comm
   }
 
   try {
-    // Find existing comment by looking at PR comments
+    core.info(`Attempting to comment on PR #${prNumber}`);
+    
+    // Check if we have the necessary permissions by testing with a simple API call first
+    try {
+      await octokit.rest.pulls.get({
+        owner,
+        repo,
+        pull_number: prNumber
+      });
+      core.info('Successfully accessed PR information');
+    } catch (permError) {
+      core.error(`Cannot access PR: ${permError.message}`);
+      throw permError;
+    }
+
+    // Find existing comment
     const comments = await octokit.rest.issues.listComments({
       owner,
       repo,
@@ -34750,6 +34765,13 @@ async function handlePullRequest(octokit, context, currentStats, baseStats, comm
     }
   } catch (error) {
     core.error(`Failed to post comment: ${error.message}`);
+    
+    // Log more details about the error
+    if (error.status === 403) {
+      core.error('Permission denied. The GITHUB_TOKEN may not have sufficient permissions.');
+      core.error('Make sure the workflow has "pull-requests: write" permission.');
+    }
+    
     // Don't fail the action if commenting fails
     core.warning('Could not post bundle size comment, but analysis completed successfully');
   }
