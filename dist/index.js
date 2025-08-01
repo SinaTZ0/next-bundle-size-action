@@ -34597,7 +34597,7 @@ async function run() {
     const baseBranch = core.getInput('base-branch') || 'main';
 
     // Initialize GitHub client
-    const octokit = github.getRestClient(githubToken);
+    const octokit = github.getOctokit(githubToken);
     const context = github.context;
 
     // Check if we're in a PR
