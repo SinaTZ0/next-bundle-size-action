@@ -1,0 +1,31 @@
+name: 'Next.js Bundle Size Analyzer'
+description: 'Analyzes Next.js bundle sizes and comments the comparison on pull requests'
+author: 'Your Name'
+branding:
+  icon: 'bar-chart-2'
+  color: 'blue'
+
+inputs:
+  working-directory:
+    description: 'Directory containing the Next.js project (where .next folder is located)'
+    required: false
+    default: '.'
+  
+  github-token:
+    description: 'GitHub token for commenting on PRs'
+    required: false
+    default: ${{ github.token }}
+  
+  comment-strategy:
+    description: 'Comment strategy: always, skip-insignificant'
+    required: false
+    default: 'always'
+  
+  base-branch:
+    description: 'Base branch to compare against'
+    required: false
+    default: 'main'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'

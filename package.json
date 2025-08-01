@@ -1,0 +1,29 @@
+{
+  "name": "next-bundle-size-action",
+  "version": "1.0.0",
+  "description": "GitHub Action to analyze Next.js bundle sizes and comment on PRs",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "ncc build src/index.js -o dist --source-map --license licenses.txt",
+    "package": "npm run build",
+    "test": "jest",
+    "all": "npm run build && npm run package"
+  },
+  "keywords": [
+    "actions",
+    "node",
+    "nextjs",
+    "bundle",
+    "analyzer"
+  ],
+  "author": "Your Name",
+  "license": "MIT",
+  "dependencies": {
+    "@actions/core": "^1.11.1",
+    "@actions/github": "^6.0.1",
+    "fs-extra": "^11.3.0"
+  },
+  "devDependencies": {
+    "@vercel/ncc": "^0.38.3"
+  }
+}
