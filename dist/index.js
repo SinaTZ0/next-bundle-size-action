@@ -34873,23 +34873,43 @@ function generateCurrentStatsTable(stats) {
 
 function generateComparisonTable(currentStats, baseStats) {
   let table = '### Bundle Size Comparison\n\n';
-  table += '| Route | Current | Base | Diff | Change |\n';
-  table += '|-------|---------|------|------|--------|\n';
-
+  
   const allRoutes = new Set([
     ...Object.keys(currentStats.routes),
     ...Object.keys(baseStats.routes)
   ]);
+
+  const changedRoutes = [];
 
   for (const route of allRoutes) {
     const current = currentStats.routes[route] || { size: 0, files: 0 };
     const base = baseStats.routes[route] || { size: 0, files: 0 };
     
     const diff = current.size - base.size;
-    const diffFormatted = diff > 0 ? `+${formatBytes(diff)}` : formatBytes(diff);
-    const changeIcon = diff > 0 ? '🔺' : diff < 0 ? '🔻' : '➖';
     
-    table += `| ${route} | ${formatBytes(current.size)} | ${formatBytes(base.size)} | ${diffFormatted} | ${changeIcon} |\n`;
+    // Only include routes that have actual changes
+    if (diff !== 0) {
+      changedRoutes.push({
+        route,
+        current: current.size,
+        base: base.size,
+        diff,
+        diffFormatted: diff > 0 ? `+${formatBytes(diff)}` : formatBytes(diff),
+        changeIcon: diff > 0 ? '🔺' : diff < 0 ? '🔻' : '➖'
+      });
+    }
+  }
+
+  // If no routes have changed, show a simple message
+  if (changedRoutes.length === 0) {
+    table += '✅ **No changes in route bundle sizes**\n';
+  } else {
+    table += '| Route | Current | Base | Diff | Change |\n';
+    table += '|-------|---------|------|------|--------|\n';
+
+    for (const { route, current, base, diffFormatted, changeIcon } of changedRoutes) {
+      table += `| ${route} | ${formatBytes(current)} | ${formatBytes(base)} | ${diffFormatted} | ${changeIcon} |\n`;
+    }
   }
 
   const totalDiff = currentStats.totalSize - baseStats.totalSize;
