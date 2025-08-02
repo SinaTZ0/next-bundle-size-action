@@ -60,24 +60,41 @@ async function analyzeBundleSize(workingDir) {
   try {
     const buildManifest = await fs.readJson(buildManifestPath);
     const stats = {};
+    
+    core.info(`Build manifest loaded successfully from ${buildManifestPath}`);
+    
+    if (!buildManifest.pages || Object.keys(buildManifest.pages).length === 0) {
+      core.warning('No pages found in build manifest. This might indicate an incomplete build or a different Next.js version.');
+    }
 
     // Analyze pages
     if (buildManifest.pages) {
+      core.info(`Found ${Object.keys(buildManifest.pages).length} pages in build manifest`);
+      
       for (const [page, files] of Object.entries(buildManifest.pages)) {
         let totalSize = 0;
+        let foundFiles = 0;
+        
+        core.debug(`Analyzing page: ${page} with ${files.length} files`);
         
         for (const file of files) {
-          const filePath = path.join(nextDir, 'static', file);
+          const filePath = path.join(nextDir, file);
           if (await fs.pathExists(filePath)) {
             const stat = await fs.stat(filePath);
             totalSize += stat.size;
+            foundFiles++;
+            core.debug(`  Found: ${file} (${formatBytes(stat.size)})`);
+          } else {
+            core.debug(`  Missing: ${file} (expected at ${filePath})`);
           }
         }
         
         stats[page] = {
           size: totalSize,
-          files: files.length
+          files: foundFiles
         };
+        
+        core.info(`  ${page}: ${formatBytes(totalSize)} (${foundFiles}/${files.length} files found)`);
       }
     }
 
