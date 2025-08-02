@@ -50,32 +50,32 @@ async function run() {
 
 async function analyzeBundleSize(workingDir) {
   const nextDir = path.join(workingDir, '.next');
-  const buildManifestPath = path.join(nextDir, 'build-manifest.json');
+  const appBuildManifestPath = path.join(nextDir, 'app-build-manifest.json');
   
-  if (!await fs.pathExists(buildManifestPath)) {
-    core.warning('Build manifest not found. Make sure Next.js build has completed.');
+  if (!await fs.pathExists(appBuildManifestPath)) {
+    core.warning('App build manifest not found. Make sure Next.js build has completed with App Router.');
     return null;
   }
 
   try {
-    const buildManifest = await fs.readJson(buildManifestPath);
+    const appBuildManifest = await fs.readJson(appBuildManifestPath);
     const stats = {};
     
-    core.info(`Build manifest loaded successfully from ${buildManifestPath}`);
+    core.info(`App build manifest loaded successfully from ${appBuildManifestPath}`);
     
-    if (!buildManifest.pages || Object.keys(buildManifest.pages).length === 0) {
-      core.warning('No pages found in build manifest. This might indicate an incomplete build or a different Next.js version.');
+    if (!appBuildManifest.pages || Object.keys(appBuildManifest.pages).length === 0) {
+      core.warning('No app routes found in build manifest. This might indicate an incomplete build.');
     }
 
-    // Analyze pages
-    if (buildManifest.pages) {
-      core.info(`Found ${Object.keys(buildManifest.pages).length} pages in build manifest`);
+    // Analyze app routes
+    if (appBuildManifest.pages) {
+      core.info(`Found ${Object.keys(appBuildManifest.pages).length} app routes in build manifest`);
       
-      for (const [page, files] of Object.entries(buildManifest.pages)) {
+      for (const [route, files] of Object.entries(appBuildManifest.pages)) {
         let totalSize = 0;
         let foundFiles = 0;
         
-        core.debug(`Analyzing page: ${page} with ${files.length} files`);
+        core.debug(`Analyzing app route: ${route} with ${files.length} files`);
         
         for (const file of files) {
           const filePath = path.join(nextDir, file);
@@ -89,12 +89,12 @@ async function analyzeBundleSize(workingDir) {
           }
         }
         
-        stats[page] = {
+        stats[route] = {
           size: totalSize,
           files: foundFiles
         };
         
-        core.info(`  ${page}: ${formatBytes(totalSize)} (${foundFiles}/${files.length} files found)`);
+        core.info(`  ${route}: ${formatBytes(totalSize)} (${foundFiles}/${files.length} files found)`);
       }
     }
 
@@ -125,7 +125,7 @@ async function analyzeBundleSize(workingDir) {
     }
 
     return {
-      pages: stats,
+      routes: stats,
       totalSize: totalBundleSize,
       timestamp: new Date().toISOString()
     };
@@ -271,12 +271,12 @@ function generateComparisonComment(currentStats, baseStats) {
 
 function generateCurrentStatsTable(stats) {
   let table = '### Current Bundle Sizes\n\n';
-  table += '| Page | Size | Files |\n';
-  table += '|------|------|-------|\n';
+  table += '| Route | Size | Files |\n';
+  table += '|-------|------|-------|\n';
 
-  for (const [page, data] of Object.entries(stats.pages)) {
+  for (const [route, data] of Object.entries(stats.routes)) {
     const sizeFormatted = formatBytes(data.size);
-    table += `| ${page} | ${sizeFormatted} | ${data.files} |\n`;
+    table += `| ${route} | ${sizeFormatted} | ${data.files} |\n`;
   }
 
   table += `\n**Total Bundle Size**: ${formatBytes(stats.totalSize)}\n`;
@@ -288,23 +288,23 @@ function generateCurrentStatsTable(stats) {
 
 function generateComparisonTable(currentStats, baseStats) {
   let table = '### Bundle Size Comparison\n\n';
-  table += '| Page | Current | Base | Diff | Change |\n';
-  table += '|------|---------|------|------|--------|\n';
+  table += '| Route | Current | Base | Diff | Change |\n';
+  table += '|-------|---------|------|------|--------|\n';
 
-  const allPages = new Set([
-    ...Object.keys(currentStats.pages),
-    ...Object.keys(baseStats.pages)
+  const allRoutes = new Set([
+    ...Object.keys(currentStats.routes),
+    ...Object.keys(baseStats.routes)
   ]);
 
-  for (const page of allPages) {
-    const current = currentStats.pages[page] || { size: 0, files: 0 };
-    const base = baseStats.pages[page] || { size: 0, files: 0 };
+  for (const route of allRoutes) {
+    const current = currentStats.routes[route] || { size: 0, files: 0 };
+    const base = baseStats.routes[route] || { size: 0, files: 0 };
     
     const diff = current.size - base.size;
     const diffFormatted = diff > 0 ? `+${formatBytes(diff)}` : formatBytes(diff);
     const changeIcon = diff > 0 ? '🔺' : diff < 0 ? '🔻' : '➖';
     
-    table += `| ${page} | ${formatBytes(current.size)} | ${formatBytes(base.size)} | ${diffFormatted} | ${changeIcon} |\n`;
+    table += `| ${route} | ${formatBytes(current.size)} | ${formatBytes(base.size)} | ${diffFormatted} | ${changeIcon} |\n`;
   }
 
   const totalDiff = currentStats.totalSize - baseStats.totalSize;
